@@ -1,5 +1,8 @@
 import requests
 import json
+from typing import List, Dict, Optional, Union
+from datetime import date
+
 from .order import Order
 from .client_info import ClientInfo
 from .datatypes import Data
@@ -8,6 +11,7 @@ from .intervaltypes import Interval
 
 class DeGiro:
     __LOGIN_URL = 'https://trader.degiro.nl/login/secure/login'
+    __LOGIN_OTP_URL = 'https://trader.degiro.nl/login/secure/login/totp'
     __CONFIG_URL = 'https://trader.degiro.nl/login/secure/config'
 
     __LOGOUT_URL = 'https://trader.degiro.nl/trading/secure/logout'
@@ -35,15 +39,21 @@ class DeGiro:
     client_info = any
     confirmation_id = any
 
-    def login(self, username, password):
+    def login(self, username: str, password: str, otp: int = None) -> Dict:
         login_payload = {
             'username': username,
             'password': password,
             'isPassCodeReset': False,
             'isRedirectToMobile': False
         }
-        login_response = self.__request(DeGiro.__LOGIN_URL, None, login_payload, request_type=DeGiro.__POST_REQUEST,
-                                        error_message='Could not login.')
+        if otp is None:
+            login_response = self.__request(DeGiro.__LOGIN_URL, None, login_payload, request_type=DeGiro.__POST_REQUEST,
+                                            error_message='Could not login.')
+        else:
+            login_payload["oneTimePassword"] = otp
+            login_response = self.__request(DeGiro.__LOGIN_OTP_URL, None, login_payload,
+                                            request_type=DeGiro.__POST_REQUEST,
+                                            error_message='Could not login.')
         self.session_id = login_response['sessionId']
         client_info_payload = {'sessionId': self.session_id}
         client_info_response = self.__request(DeGiro.__CLIENT_INFO_URL, None, client_info_payload,
@@ -60,7 +70,7 @@ class DeGiro:
 
         return client_info_response
 
-    def logout(self):
+    def logout(self) -> Dict:
         logout_payload = {
             'intAccount': self.client_info.account_id,
             'sessionId': self.session_id,
@@ -70,7 +80,7 @@ class DeGiro:
 
     @staticmethod
     def __request(url, cookie=None, payload=None, headers=None, data=None, post_params=None, request_type=__GET_REQUEST,
-                  error_message='An error occurred.'):
+                  error_message='An error occurred.') -> Dict:
 
         if request_type == DeGiro.__DELETE_REQUEST:
             response = requests.delete(url, json=payload)
@@ -95,7 +105,7 @@ class DeGiro:
         else:
             raise Exception(f'{error_message} Response: {response.text}')
 
-    def search_products(self, search_text, limit=1):
+    def search_products(self, search_text, limit=1) -> List[Dict]:
         product_search_payload = {
             'searchText': search_text,
             'limit': limit,
@@ -106,7 +116,7 @@ class DeGiro:
         return self.__request(DeGiro.__PRODUCT_SEARCH_URL, None, product_search_payload,
                               error_message='Could not get products.')['products']
 
-    def product_info(self, product_id):
+    def product_info(self, product_id) -> Dict:
         product_info_payload = {
             'intAccount': self.client_info.account_id,
             'sessionId': self.session_id
@@ -117,7 +127,7 @@ class DeGiro:
                               request_type=DeGiro.__POST_REQUEST,
                               error_message='Could not get product info.')['data'][str(product_id)]
 
-    def transactions(self, from_date, to_date, group_transactions=False):
+    def transactions(self, from_date: date, to_date: date, group_transactions=False) -> List[Dict]:
         transactions_payload = {
             'fromDate': from_date.strftime('%d/%m/%Y'),
             'toDate': to_date.strftime('%d/%m/%Y'),
@@ -128,7 +138,7 @@ class DeGiro:
         return self.__request(DeGiro.__TRANSACTIONS_URL, None, transactions_payload,
                               error_message='Could not get transactions.')['data']
 
-    def orders(self, from_date, to_date, not_executed=None):
+    def orders(self, from_date, to_date, not_executed=None) -> List[Dict]:
         orders_payload = {
             'fromDate': from_date.strftime('%d/%m/%Y'),
             'toDate': to_date.strftime('%d/%m/%Y'),
@@ -148,7 +158,7 @@ class DeGiro:
         else:
             return data
 
-    def delete_order(self, orderId):
+    def delete_order(self, orderId) -> Dict:
         delete_order_params = {
             'intAccount': self.client_info.account_id,
             'sessionId': self.session_id,
@@ -160,7 +170,7 @@ class DeGiro:
                               error_message='Could not delete order' + " " + orderId)
 
     @staticmethod
-    def filtercashfunds(cashfunds):
+    def filtercashfunds(cashfunds) -> List[Dict]:
         data = []
         for item in cashfunds['cashFunds']['value']:
             if item['value'][2]['value'] != 0:
@@ -168,7 +178,7 @@ class DeGiro:
         return data
 
     @staticmethod
-    def filterportfolio(portfolio, filter_zero=None):
+    def filterportfolio(portfolio, filter_zero=None) -> List[Dict]:
         data = []
         data_non_zero = []
         for item in portfolio['portfolio']['value']:
@@ -195,7 +205,7 @@ class DeGiro:
         else:
             return data
 
-    def getdata(self, datatype, filter_zero=None):
+    def getdata(self, datatype, filter_zero=None) -> Union[List[Dict], Dict]:
         data_payload = {
             datatype: 0
         }
@@ -218,7 +228,7 @@ class DeGiro:
                 data_payload,
                 error_message='Could not get data')
 
-    def real_time_price(self, product_id, interval):
+    def real_time_price(self, product_id, interval) -> List[Dict]:
         vw_id = self.product_info(product_id)['vwdId']
         tmp = vw_id
         try:
@@ -234,9 +244,9 @@ class DeGiro:
         }
 
         return self.__request(DeGiro.__PRICE_DATA_URL, None, price_payload,
-                             error_message='Could not get real time price')['series']
+                              error_message='Could not get real time price')['series']
 
-    def buyorder(self, orderType, productId, timeType, size, limit=None, stop_loss=None):
+    def buyorder(self, orderType, productId, timeType, size, limit=None, stop_loss=None) -> Dict:
         place_buy_order_params = {
             'intAccount': self.client_info.account_id,
             'sessionId': self.session_id,
@@ -269,7 +279,7 @@ class DeGiro:
                        request_type=DeGiro.__POST_REQUEST,
                        error_message='Could not confirm order')
 
-    def sellorder(self, orderType, productId, timeType, size, limit=None, stop_loss=None):
+    def sellorder(self, orderType, productId, timeType, size, limit=None, stop_loss=None) -> Dict:
         place_sell_order_params = {
             'intAccount': self.client_info.account_id,
             'sessionId': self.session_id,
@@ -302,7 +312,7 @@ class DeGiro:
                        request_type=DeGiro.__POST_REQUEST,
                        error_message='Could not confirm order')
 
-    def get_stock_list(self, indexId, stockCountryId):
+    def get_stock_list(self, indexId, stockCountryId) -> List[Dict]:
         stock_list_params = {
             'indexId': indexId,
             'stockCountryId': stockCountryId,
@@ -315,5 +325,5 @@ class DeGiro:
             'sessionId': self.session_id
         }
         return \
-            self.__request(DeGiro.__GET_STOCKS_URL, None, stock_list_params, error_message='Could not get stock list')[
-                'products']
+        self.__request(DeGiro.__GET_STOCKS_URL, None, stock_list_params, error_message='Could not get stock list')[
+            'products']
