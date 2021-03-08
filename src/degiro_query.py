@@ -28,7 +28,7 @@ class Funds():
         """Function to login to DeGiro API.
 
         Returns:
-            If login was successful or not.
+            If login was successful (True) or not (False).
         """
         try:
             if self.otp:
@@ -39,3 +39,14 @@ class Funds():
         # TODO(me): Should add more specific exception for login failed in degiroapi.DeGiro.login.
         except Exception:
             return False
+
+    def fetch_cash_assets(self):
+        """Function to show the user's cash assets.
+
+        Returns:
+             The available cash funds in the user account in the format 'CURRENCY: Value', e.g. EURO 5.5.
+        """
+        return [
+            {"amount": balance.split()[1], "currency": balance.split()[0]}
+            for balance in self.client.getdata(degiroapi.Data.Type.CASHFUNDS)
+        ]
